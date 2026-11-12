@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#f2c56c">
+  <meta name="description" content="Bayline Rush is a warm, cartoon delivery game. Small city. Big deliveries.">
+  <title>Bayline Rush — Small city. Big deliveries.</title>
+  <link rel="icon" href="TemplateData/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="TemplateData/style.css">
+</head>
+<body>
+  <main id="game-frame" aria-label="Bayline Rush game">
+    <div id="unity-container">
+      <canvas id="unity-canvas" width="1920" height="1080" tabindex="-1"></canvas>
+    </div>
+
+    <section id="start-screen" aria-live="polite">
+      <div class="poster">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 180 110" role="img">
+            <path d="M38 16c17-10 39-9 55 2" fill="none" stroke="#f7e7bd" stroke-width="7" stroke-linecap="round"/>
+            <circle cx="145" cy="24" r="18" fill="#ffd15c"/>
+            <path d="M18 71h144l-13 23H34z" fill="#124c59"/>
+            <path d="M47 34h72c15 0 28 10 33 24l8 13H29l7-20c3-10 8-17 11-17z" fill="#f06b4f"/>
+            <path d="M58 42h29v22H45zM94 42h20c10 0 18 6 24 22H94z" fill="#d9f2e8"/>
+            <circle cx="54" cy="93" r="14" fill="#23343a"/><circle cx="54" cy="93" r="6" fill="#f7e7bd"/>
+            <circle cx="133" cy="93" r="14" fill="#23343a"/><circle cx="133" cy="93" r="6" fill="#f7e7bd"/>
+          </svg>
+        </div>
+        <p class="eyebrow">A tiny courier story</p>
+        <h1>Bayline <span>Rush</span></h1>
+        <p class="tagline">Small city. Big deliveries.</p>
+
+        <div class="intro-copy">
+          <p>Meet Rook, the newest courier in Bayline. Follow the flags, carry the parcel, and keep the little hatchback moving.</p>
+        </div>
+
+        <button id="play-button" type="button" aria-label="Start Bayline Rush">
+          <span class="play-icon" aria-hidden="true">▶</span>
+          <span>Start the first shift</span>
+        </button>
+        <p class="play-note">Arrow keys / WASD or touch • Landscape recommended • Audio starts after tapping</p>
+
+        <div id="loading-panel" hidden>
+          <div class="loading-row">
+            <span id="loading-label">Warming up the hatchback…</span>
+            <span id="loading-percent">0%</span>
+          </div>
+          <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="progress-fill"></div>
+          </div>
+          <p id="loading-tip">Tip: hold BRAKE while steering to drift and build Flow.</p>
+        </div>
+        <p id="error-message" hidden></p>
+      </div>
+      <div class="city-strip" aria-hidden="true">
+        <span class="building a"></span><span class="building b"></span><span class="building c"></span>
+        <span class="building d"></span><span class="building e"></span><span class="tree"></span>
+      </div>
+    </section>
+
+    <div id="rotate-screen">
+      <div class="rotate-card">
+        <div class="phone-icon" aria-hidden="true"></div>
+        <strong>Turn the phone sideways</strong>
+        <span>Bayline Rush plays in landscape.</span>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const buildUrl = "Build";
+    const loaderUrl = buildUrl + "/a4867b85992aee1f879625bf8f72f284.loader.js";
+    const config = {
+      dataUrl: buildUrl + "/4f108d4988927afc473c2aecf674eb0e.data.unityweb",
+      frameworkUrl: buildUrl + "/fd948fe3ca1ab12bb924aaa0d2bb035e.framework.js.unityweb",
+      codeUrl: buildUrl + "/fa1d4f3a7c76647bc64ec015e9b75616.wasm.unityweb",
+      streamingAssetsUrl: "StreamingAssets",
+      companyName: "Cristi Studio",
+      productName: "Bayline Rush",
+      productVersion: "0.1.0",
+      showBanner: unityShowBanner
+    };
+
+    const frame = document.querySelector("#game-frame");
+    const canvas = document.querySelector("#unity-canvas");
+    const startScreen = document.querySelector("#start-screen");
+    const playButton = document.querySelector("#play-button");
+    const loadingPanel = document.querySelector("#loading-panel");
+    const progressTrack = document.querySelector(".progress-track");
+    const progressFill = document.querySelector("#progress-fill");
+    const loadingPercent = document.querySelector("#loading-percent");
+    const loadingLabel = document.querySelector("#loading-label");
+    const errorMessage = document.querySelector("#error-message");
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints > 1 && window.matchMedia("(pointer: coarse)").matches);
+
+    let started = false;
+    let unityInstance = null;
+
+    function unityShowBanner(message, type) {
+      if (type === "error" || type === "warning") {
+        loadingLabel.textContent = message;
+      }
+    }
+
+    function setProgress(value) {
+      const percent = Math.round(Math.max(0, Math.min(1, value)) * 100);
+      progressFill.style.width = percent + "%";
+      loadingPercent.textContent = percent + "%";
+      progressTrack.setAttribute("aria-valuenow", String(percent));
+    }
+
+    async function enterImmersiveMode() {
+      if (!isMobile) return;
+      try {
+        if (frame.requestFullscreen) await frame.requestFullscreen({ navigationUI: "hide" });
+      } catch (_) {}
+      try {
+        if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape");
+      } catch (_) {}
+    }
+
+    function beginLoading() {
+      startScreen.classList.add("starting");
+      loadingPanel.hidden = false;
+      playButton.hidden = true;
+      loadingLabel.textContent = "Loading the Bayline city map…";
+      setProgress(0.02);
+
+      const script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = () => {
+        loadingLabel.textContent = "Opening the dispatch office…";
+        createUnityInstance(canvas, config, (progress) => setProgress(progress))
+          .then((instance) => {
+            unityInstance = instance;
+            setProgress(1);
+            loadingLabel.textContent = "Shift ready";
+            document.body.classList.add("game-live");
+            startScreen.classList.add("ready");
+            canvas.focus();
+            window.setTimeout(() => {
+              startScreen.classList.add("dismissed");
+              startScreen.setAttribute("aria-hidden", "true");
+            }, 520);
+          })
+          .catch((message) => showError(typeof message === "string" ? message : "The game could not start."));
+      };
+      script.onerror = () => showError("The game files could not be loaded. Check the connection and try again.");
+      document.body.appendChild(script);
+    }
+
+    function showError(message) {
+      startScreen.classList.remove("starting", "ready", "dismissed");
+      startScreen.removeAttribute("aria-hidden");
+      loadingPanel.hidden = true;
+      playButton.hidden = false;
+      playButton.querySelector("span:last-child").textContent = "Try again";
+      errorMessage.hidden = false;
+      errorMessage.textContent = message;
+      started = false;
+    }
+
+    playButton.addEventListener("click", async () => {
+      if (started) return;
+      started = true;
+      errorMessage.hidden = true;
+      await enterImmersiveMode();
+      beginLoading();
+    });
+
+    canvas.addEventListener("pointerdown", () => canvas.focus());
+  </script>
+</body>
+</html>
